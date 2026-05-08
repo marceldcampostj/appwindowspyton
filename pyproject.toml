@@ -3,3 +3,9 @@ app_name = "Sincronizador"
 product_name = "Sincronizador"
 org = "com.dynamicapps"
 description = "Sincronizador de Bancos de Dados"
+dependencies = [
+    "aiomysql==0.2.0",
+    "pillow",
+    "pystray",
+    "pywin32",
+]
