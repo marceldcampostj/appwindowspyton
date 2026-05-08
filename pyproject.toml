@@ -1,0 +1,5 @@
+[tool.flet]
+app_name = "Sincronizador"
+product_name = "Sincronizador"
+org = "com.dynamicapps"
+description = "Sincronizador de Bancos de Dados"

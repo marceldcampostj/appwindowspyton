@@ -24,11 +24,7 @@ jobs:
 
       - name: Build Windows
         run: |
-          flet build windows main_flet.py `
-            --product-name "Sincronizador" `
-            --org com.dynamicapps `
-            --icon 788.ico `
-            --no-rich-output
+          flet build windows main_flet.py --no-rich-output
 
       - name: Upload do executável
         uses: actions/upload-artifact@v4
