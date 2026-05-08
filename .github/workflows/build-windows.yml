@@ -1,0 +1,38 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install flet==0.84.0 aiomysql pillow pystray pywin32
+
+      - name: Build Windows
+        run: |
+          flet build windows main_flet.py `
+            --product-name "Sincronizador" `
+            --org com.dynamicapps `
+            --icon 788.ico `
+            --no-rich-output
+
+      - name: Upload do executável
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sincronizador-Windows
+          path: build/windows/
+          retention-days: 30

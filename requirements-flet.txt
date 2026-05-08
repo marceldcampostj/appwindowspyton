@@ -1,0 +1,5 @@
+flet==0.84.0
+aiomysql==0.2.0
+pillow
+pystray
+pywin32; platform_system == "Windows"
