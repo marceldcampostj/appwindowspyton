@@ -327,29 +327,33 @@ class SincronizadorApp:
             self.log_message("Sincronização sendo parada...", "warning")
 
     async def run_async_sync(self):
-        self.produto_sync_last = datetime.now()
-        while self.sync_active:
-            try:
-                pool_local, pool_remoto = await self.create_pool_with_retry()
-                now = datetime.now()
-                if (now - self.produto_sync_last).total_seconds() >= 180 or self.produto_sync_last is None:
-                    await self.sincronizar_produtos(pool_local, pool_remoto)
-                    self.produto_sync_last = now
-                await self.sincronizar_lancamentos_caixa(pool_local, pool_remoto)
-                await self.sincronizar_vendas(pool_local, pool_remoto)
-            except Exception as e:
-                self.log_message(f"❌ Erro crítico: {str(e)}. Tentando novamente em 30 segundos...", "error")
-                await asyncio.sleep(30)
-                continue
-            if self.sync_active:
-                await asyncio.sleep(60)
-        if pool_local:
-            pool_local.close()
-            await pool_local.wait_closed()
-        if pool_remoto:
-            pool_remoto.close()
-            await pool_remoto.wait_closed()
-        self.update_ui_status(False)
+        self.produto_sync_last = None
+        pool_local = None
+        pool_remoto = None
+        try:
+            pool_local, pool_remoto = await self.create_pool_with_retry()
+            while self.sync_active:
+                try:
+                    now = datetime.now()
+                    if self.produto_sync_last is None or (now - self.produto_sync_last).total_seconds() >= 180:
+                        await self.sincronizar_produtos(pool_local, pool_remoto)
+                        self.produto_sync_last = now
+                    await self.sincronizar_lancamentos_caixa(pool_local, pool_remoto)
+                    await self.sincronizar_vendas(pool_local, pool_remoto)
+                except Exception as e:
+                    self.log_message(f"❌ Erro crítico: {str(e)}. Tentando novamente em 30 segundos...", "error")
+                    await asyncio.sleep(30)
+                    continue
+                if self.sync_active:
+                    await asyncio.sleep(60)
+        finally:
+            if pool_local:
+                pool_local.close()
+                await pool_local.wait_closed()
+            if pool_remoto:
+                pool_remoto.close()
+                await pool_remoto.wait_closed()
+            self.update_ui_status(False)
 
     async def create_pool_with_retry(self):
         max_attempts = 5
@@ -435,7 +439,7 @@ class SincronizadorApp:
                             await self.inserir_produto(cursor_remoto, produto)
                         await conn_remoto.commit()
                         self.log_message(f"✅ Produto Nº {id_produto} sincronizado com sucesso!", "success")
-                        await self.marcar_como_enviado(cursor_local, id_produto)
+                        await self.marcar_como_enviado(conn_local, cursor_local, id_produto)
                     except Exception as e:
                         await conn_remoto.rollback()
                         self.log_message(f"❌ Erro no produto {id_produto}: {str(e)}", "error")
@@ -443,18 +447,18 @@ class SincronizadorApp:
                     await asyncio.sleep(0.5)
                 self.log_message("🏁 Sincronização de produtos concluída!", "success")
 
-    async def marcar_como_enviado(self, cursor, id_produto):
+    async def marcar_como_enviado(self, conn, cursor, id_produto):
         try:
             await cursor.execute("""
-                UPDATE produto 
-                SET enviado = 'S' 
+                UPDATE produto
+                SET enviado = 'S'
                 WHERE id = %s AND (enviado = 'N' OR enviado IS NULL)
             """, (id_produto,))
             rows_affected = cursor.rowcount
             if rows_affected == 0:
                 self.log_message(f"⚠️ Produto {id_produto} não foi marcado como enviado (já estava marcado?)", "warning")
             else:
-                await cursor.connection.commit()
+                await conn.commit()
                 self.log_message(f"✓ Produto {id_produto} marcado como enviado", "success")
         except Exception as e:
             self.log_message(f"❌ Erro ao marcar produto {id_produto} como enviado: {str(e)}", "error")
@@ -524,7 +528,7 @@ class SincronizadorApp:
                             await self.inserir_lancamento(cursor_remoto, registro)
                         await conn_remoto.commit()
                         self.log_message(f"✅ Lançamento Nº {id_registro} sincronizado com sucesso!", "success")
-                        await self.marcar_como_transferido(cursor_local, id_registro, 'lancamentoscaixa')
+                        await self.marcar_como_transferido(conn_local, cursor_local, id_registro, 'lancamentoscaixa')
                     except Exception as e:
                         await conn_remoto.rollback()
                         self.log_message(f"❌ Erro no lançamento {id_registro}: {str(e)}", "error")
@@ -532,18 +536,18 @@ class SincronizadorApp:
                     await asyncio.sleep(0.5)
                 self.log_message("🏁 Sincronização de lançamentos concluída!", "success")
 
-    async def marcar_como_transferido(self, cursor, id_registro, tabela):
+    async def marcar_como_transferido(self, conn, cursor, id_registro, tabela):
         try:
             await cursor.execute(f"""
-                UPDATE {tabela} 
-                SET transferido = 'S' 
+                UPDATE {tabela}
+                SET transferido = 'S'
                 WHERE id = %s AND (transferido = 'N' OR transferido IS NULL)
             """, (id_registro,))
             rows_affected = cursor.rowcount
             if rows_affected == 0:
                 self.log_message(f"⚠️ Registro {id_registro} da tabela {tabela} não foi marcado como transferido (já estava marcado?)", "warning")
             else:
-                await cursor.connection.commit()
+                await conn.commit()
                 self.log_message(f"✓ Registro {id_registro} da tabela {tabela} marcado como transferido", "success")
         except Exception as e:
             self.log_message(f"❌ Erro ao marcar registro {id_registro} da tabela {tabela} como transferido: {str(e)}", "error")
@@ -636,7 +640,7 @@ class SincronizadorApp:
                         await self.sincronizar_itens_venda(cursor_local, cursor_remoto, id_venda)
                         await conn_remoto.commit()
                         self.log_message(f"✅ Venda Nº {id_venda} sincronizada com sucesso!", "success")
-                        await self.marcar_como_transferido(cursor_local, id_venda, 'venda')
+                        await self.marcar_como_transferido(conn_local, cursor_local, id_venda, 'venda')
                     except Exception as e:
                         await conn_remoto.rollback()
                         self.log_message(f"❌ Erro na venda {id_venda}: {str(e)}", "error")
