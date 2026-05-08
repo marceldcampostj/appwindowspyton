@@ -34,7 +34,7 @@ jobs:
           PYTHONIOENCODING: "utf-8"
         run: |
           chcp 65001
-          flet build windows main_flet.py --no-rich-output
+          flet build windows --module-name main_flet --no-rich-output
 
       - name: Upload do executável
         uses: actions/upload-artifact@v4
