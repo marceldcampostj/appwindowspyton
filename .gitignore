@@ -2,7 +2,6 @@ config.json
 build/
 dist/
 __pycache__/
-*.spec
 *.pyc
 error_log.txt
 backup*/
